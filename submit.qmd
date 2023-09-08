@@ -1,28 +1,82 @@
 ---
-title: ""
-author: ""
+title: "Lab3"
+author: "Hsi-Hsuan Yang"
 format:
   html:
     embed-resources: true
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
 
 ```{r}
-1 + 1
+download.file(
+  "https://raw.githubusercontent.com/USCbiostats/data-science-data/master/02_met/met_all.gz",
+  destfile = file.path("~", "Downloads", "met_all.gz"),
+  method   = "libcurl",
+  timeout  = 60
+)
+
+met <- data.table::fread(file.path("~", "Downloads", "met_all.gz"))
 ```
-
-You can add options to executable code like this
-
+Question 1
 ```{r}
-#| echo: false
-2 * 2
+dim(met)
+head(met)
+tail(met)
+```
+Question 2
+```{r}
+str(met)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+Question 3
+```{r}
+table(met$year)
+table(met$day)
+table(met$hour)
+summary(met$temp)
+summary(met$elev)
+summary(met$wind.sp)
+met[met$elev==9999.0] <- NA
+summary(met$elev)
+met <- met[temp>-40]
+met2 <- met[order(temp)]
+```
+
+Question 4
+```{r}
+met <- met[temp>-15]
+met2 <- met[order(temp)]
+head(met2)
+```
+Question 5
+```{r}
+elev <- met[elev==max(elev), ]
+summary(elev)
+cor(elev$temp, elev$wind.sp, use="complete")
+cor(elev$temp, elev$hour, use="complete")
+cor(elev$wind.sp, elev$day, use="complete")
+cor(elev$wind.sp, elev$hour, use="complete")
+cor(elev$temp, elev$day, use="complete")
+```
+Question 6
+```{r}
+hist(met$elev, breaks=100)
+hist(met$temp)
+hist(met$wind.sp)
+```
+Question 7
+```{r}
+library(magrittr)
+library(leaflet)
+leaflet(elev) %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(lat=~lat,lng=~lon, opacity=1, fillOpacity=1, radius=100)
+library(lubridate)
+elev$date <- with(elev, ymd_h(paste(year, month, day, hour, sep= ' ')))
+summary(elev$date)
+elev <- elev[order(date)]
+head(elev)
+plot(elev$date, elev$temp, type='l')
+plot(elev$date, elev$wind.sp, type='l')
+```
+
