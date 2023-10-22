@@ -1,0 +1,216 @@
+---
+title: "pm566 midterm project"
+author: "Sabrina (Hsi-Hsuan) Yang"
+format:
+  html:
+    embed-resources: true
+---
+Introduction:
+
+According to CDC, heart disease is the leading cause of death in the United States. 47% of the people in the United States have at least one of three key risk factors for heart disease: high blood pressure, high blood cholesterol, and smoking. Other key factors like diabetic status, BMI, not getting enough physical activity or drinking too much alcohol can also contribute to heart disease. Thus, detecting and preventing risk factors that have the greatest impact on heart disease is important to healthcare. In this project, the main factors that are being analyzed are BMI, sleep, physical health, diabetic status (yes or no), alcohol consumption (yes or no), smoking, physical activity. These factors are being analyzed to see the relationship between itself and the outcome (have heart disease or not) and determine whether these variables are statistically significant associated with heart disease. Multivariable regression analysis was also performed to evaluate the relationship between the heart disease and the combination of all the factors. 
+
+
+Data and indicators:
+
+The data was from 2020  with 319795 data points and 18 variables. The dataset was obtained from Kaggle (https://www.kaggle.com/datasets/kamilpytlak/personal-key-indicators-of-heart-disease/data)
+
+The heart disease health indicators based on the BRFSS 2015 Codebook (https://www.cdc.gov/brfss/annual_data/2015/pdf/codebook15_llcp.pdf)
+BMI: Body Mass Index
+Smoking: Have you smoked at least 100 cigarettes in your entire life?
+Physical activity: Adults who reported doing physical activity/exercise during the past 30 days other than their regular jobs
+Diabetic status: Were you ever told you have diabetes?
+Physical health: Now thinking about your physical health, which includes physical illness and injury, for how many days during the past 30 days was your physical health not good?
+
+
+```{r}
+library(data.table)
+library(leaflet)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(R.utils)
+library(knitr)
+library(skimr)
+heart_initial<- read_csv("/Users/sabrinayang/Downloads/heart_2020_cleaned.csv")
+skim(heart_initial)
+#remove duplicated rows
+duplicates <- duplicated(heart_initial)
+duplicate_rows <- heart_initial[duplicates, ]
+heart <- subset(heart_initial, !duplicated(heart_initial))
+```
+
+Data inspection includes: check dimensions using dim(heart), check the first few rows (headers)
+using head(heart), check the last few rows (footers) using tail(heart), and check variable names and types using str(heart).
+
+Rename variables to shorter length and all lower case
+
+```{r}
+heart<-
+  heart %>%
+  rename(
+    heartdis = HeartDisease,
+    bmi = BMI,
+    smoking = Smoking,
+    alc = AlcoholDrinking,
+    stroke = Stroke,
+    phys_H = PhysicalHealth,
+    ment_H = MentalHealth,
+    diff_walk = DiffWalking,
+    sex = Sex,
+    age = AgeCategory,
+    race = Race,
+    diabetic = Diabetic,
+    phys_A = PhysicalActivity,
+    health = GenHealth,
+    sleep = SleepTime,
+    asthma = Asthma,
+    kidney = KidneyDisease,
+    skincancer = SkinCancer
+  )
+```
+
+```{r}
+#Is there any missing value
+any(is.na(heart))
+```
+There is no missing value in the dataset.
+
+Preliminary Results
+```{r}
+#Categorize bmi into groups (category is based on CDC standard)
+heart$bmi_group <- ifelse(heart$bmi < 18.5, "underweight",
+                          ifelse(heart$bmi >= 18.5 & heart$bmi < 25, "healthy",
+                                 ifelse(heart$bmi >= 25 & heart$bmi < 30, "overweight",
+                                        ifelse(heart$bmi >= 30, "obese","not obese"))))
+table(heart$bmi_group)
+table(heart$heartdis)
+
+```
+
+```{r}
+#Change yes, no into binary 1,0
+library(dplyr)
+library(plotly)
+heart <- heart %>%
+  mutate(heartdis_bi = if_else(heartdis == "Yes", 1, 0))
+#Heart disease outcome by bmi groups in plot (data visualisation)
+heart <-
+  heart %>%
+  mutate(outcome_heart = factor(heartdis_bi))
+plot_bmi<-
+  heart %>%
+  ggplot()+
+  geom_bar(mapping = aes(x = bmi_group, fill = outcome_heart))+
+  labs(title = "Heart disease outcome by bmi groups")
+ggplotly(plot_bmi)
+```
+The plot shows that most people in the study are either obese or overweight. Majority of the people in the study who have heart disease are in obese and overweight group, while the least people are in the underweight group. 
+```{r}
+#Is BMI a significant risk factor for heart disease?
+#Regression model for bmi
+overallbmi <- glm (outcome_heart ~ bmi, data = heart, family = binomial)
+summary(overallbmi)
+```
+In this logistic regression model, the dependent variable is whether an individual has heart disease (0 for no heart disease, 1 for having heart disease) and the independent variable is BMI. For a one-unit increase in BMI, the estimated log-odds of having heart disease increase by 0.0234955 and the p-value being extremely close to zero (p< 2 x 10^-16) suggest that there is an evidence that BMI is associated with the likelihood of having heart disease.
+
+Breaking BMI into categories makes it easier to interpret the model in terms of risk associated with different BMI categories.
+```{r}
+#Regression model for bmi groups
+reg_bmi<- glm (outcome_heart ~ bmi_group, data = heart, family = binomial)
+summary(reg_bmi)
+```
+Coefficients for BMI groups: looking at the effect of different BMI categories on the likelihood of a person having a heart disease compared to healthy group.
+
+The response variable being 1 indicates a person having a heart disease, 0 indicates a person doesn't have a heart disease. For the obese group, the coefficient of 0.46838 indicates that, compared to individuals in healthy group, individuals in obese group have about 0.46838 increase in log-odds of having heart disease. Same logic applies to individuals who are overweight (coefficient: 0.33323) and underweight (0.14108). All p-values associated with these coefficients are <0.05, which suggest that the effect of BMI categories on the likelihood of having heart disease is statistically significant. The coefficients show that there is a positive association between higher BMI categories and the likelihood of having heart disease.
+
+```{r}
+library(mfp)
+#heart disease and sleep time relationship
+heart$sleep_group <- ifelse(heart$sleep < 7, "lack of sleep",
+                          ifelse(heart$sleep >= 7, "enough sleep", "no sleep"))
+
+model_sleep<- glm(outcome_heart ~ sleep_group, 
+         family = binomial,
+         data = heart)
+summary(model_sleep)
+#boxplot heart disease vs sleep hour 
+heart %>% 
+  filter(!(sleep %in% NA)) %>%
+ggplot()+
+  geom_boxplot(mapping = aes(y=sleep, x=outcome_heart))+
+labs(title="heart disease vs sleep hour", x="heart disease (0=no, 1= yes)", y="sleep hours") 
+#stacked histogram for heart disease vs sleep hour
+sleep1 <- ggplot(heart, aes(x=sleep, color=outcome_heart, fill=outcome_heart)) +
+  scale_fill_manual(values = c("skyblue", "pink")) +
+  scale_colour_manual(values = c("black", "black")) +
+  geom_histogram()
+ggplotly(sleep1)
+```
+The results of the regression analysis for heart disease with sleep groups (<7 hours of sleep are indicated as "lack of sleep," >=7 hours of sleep are indicated as "enough sleep") suggest that the individuals in "lack of sleep" group have an estimated increase of 0.109211 in the log-odds of having heart disease compared to those with enough sleep, assuming all other factors are held constant. The increase is statistically significant as the p-value is 5.11 x 10^-16, which is less than .05. The stacked histogram shows that the majority of the individuals who have heart disease have an average sleep of 7.93 hours. Also based on the visualisation through the boxplot, it seems like there is no obvious difference between sleep hours and heart disease as the distributions for heart disease and no heart disease are relatively similar. Therefore, exploring the correlation to understand the relationship can provide more insights. 
+```{r}
+# Calculate the correlation between heart disease and sleep hours
+library(polycor)
+cor_sleep <- cor(heart$sleep, as.numeric(heart$outcome_heart))
+print(cor_sleep)
+
+model1<- glm(outcome_heart ~ sleep, 
+         family = binomial,
+         data = heart)
+summary(model1)
+```
+The correlation coefficient is very close to 0 (0.0108336), but the p-value is statistically significant (p<.0001). It implies that there is a significant relationship between the variables sleep hours and heart disease, but the strength of the relationship is weak. This situation can suggest that the sample size is large (the dataset contains 319795 data points), could consider other variables involved, and there might be a non-linear relationship as linear relationship is what the Pearson correlation coefficient measures.
+
+The categorical variables below (physical health, diabetic status, alcohol status, smoking status, physical activity) were each ran through logistic regression model to see the association between the variable and the outcome variable (heart disease).  
+```{r}
+#heart disease vs physical health
+mfp::mfp(outcome_heart ~ fp(phys_H), family = binomial, data = heart)
+glm(outcome_heart ~ phys_H, family = binomial, data = heart) %>% summary()
+```
+The result shows the association between heart disease vs physical health function is statistically significant (p<2x10^-16).
+```{r}
+#heart disease vs diabetic status
+heart <- heart %>%
+  mutate(diabetic_status = if_else(diabetic == "Yes", 1, 0))
+mfp::mfp(outcome_heart ~ fp(diabetic_status), family = binomial, data = heart)
+glm(outcome_heart ~ diabetic_status, family = binomial, data = heart) %>% summary()
+```
+The result shows the association between heart disease vs diabetic status function is statistically significant (p<2x10^-16).
+```{r}
+#heart disease vs alcohol status
+heart <- heart %>%
+  mutate(alc_status = if_else(alc == "Yes", 1, 0))
+mfp::mfp(outcome_heart ~ fp(alc_status), family = binomial, data = heart)
+glm(outcome_heart ~ alc_status, family = binomial, data = heart) %>% summary()
+```
+The association between heart disease vs alcohol status function is statistically significant (p<2x10^-16).
+```{r}
+#heart disease vs smoking status
+heart <- heart %>%
+  mutate(smoke = if_else(smoking == "Yes", 1, 0))
+mfp::mfp(outcome_heart ~ fp(smoke), family = binomial, data = heart)
+glm(outcome_heart ~ smoke, family = binomial, data = heart) %>% summary()
+```
+The association between heart disease vs smoking function is statistically significant (p<2x10^-16).
+```{r}
+#heart disease vs physical activity
+heart <- heart %>%
+  mutate(phys = if_else(phys_A == "Yes", 1, 0))
+mfp::mfp(outcome_heart ~ fp(phys), family = binomial, data = heart)
+glm(outcome_heart ~ phys, family = binomial, data = heart) %>% summary()
+```
+The association between heart disease vs physical activity function is statistically significant (p<2x10^-16).
+All categorical variables show that the association with heart disease is statistically significant. It is also worth to see the overall relationship with heart disease when all the categorical variables and continuous variables (bmi, sleep) are considered together.
+```{r}
+model2<- glm (outcome_heart ~ bmi + sleep + phys_H + diabetic_status + alc_status + smoke + phys, family=binomial, data = heart)
+summary(model2)
+```
+All the variables besides BMI show that they are statistically significant associated with heart disease. However, when doing the heart disease vs BMI alone (bivariate relationship), it showed statistically significant association between bmi and heart disease. There could be multicollinearity where the predictors are correlated with each other making it difficult to isolate their individual effects. Thus, it is worth seeing if each BMI category has a different effect on the log-odds of the outcome compared to the reference category (in this case, the healthy bmi group). Putting BMI into groups can sometimes help to capture non-linear relationships or multicollinearity to better represent the underlying structure of the data.
+
+```{r}
+model3<- glm (outcome_heart ~ bmi_group + sleep + phys_H + diabetic_status + alc_status + smoke + phys, family=binomial, data = heart)
+summary(model3)
+```
+For individuals categorized as underweight compared to the reference category (bmi healthy group), the estimated log-odds of having heart disease decrease by -0.0213053 but it is not statistically significant (p=0.699). All estimates have significant p-values (p<2x10^-16, and p-value for bmi_groupobese is 3.41 x 10^-9) indicating evidence of association between these predictors and the likelihood of having heart disease. 
+
+Conclusion:
+According to CDC and aside from the key risk factors like high blood pressure, high blood cholesterol, and smoking, several other medical conditions and lifestyle choices can put people at a higher risk for heart disease which include but not limited to diabetes, physical inactivity, and overweight and obesity. Based on the analysis performed, diabetes, physical inactivity, high bmi, smoking, sleep hours, alcohol consumption, and overall physical health status are have statistically significant association to heart disease. 
